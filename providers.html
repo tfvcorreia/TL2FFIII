@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Providers - TrueLayer → Firefly III{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>TrueLayer Providers</h2>
+        <button class="btn" onclick="openModal('addProviderModal')">➕ Add Provider</button>
+    </div>
+    
+    <p style="margin-bottom: 20px; color: #718096;">
+        Providers represent your financial institutions (banks, credit cards) connected via TrueLayer.
+        Each provider requires a refresh token obtained from TrueLayer's authentication flow.
+    </p>
+    
+    {% if providers %}
+    <table>
+        <thead>
+            <tr>
+                <th>Provider Name</th>
+                <th>Account Type</th>
+                <th>Added</th>
+                <th>Last Sync</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for provider in providers %}
+            <tr>
+                <td><strong>{{ provider.name }}</strong></td>
+                <td>{{ provider.account_type|capitalize }}</td>
+                <td>{{ provider.created_at }}</td>
+                <td>
+                    {% if provider.last_sync %}
+                        {{ provider.last_sync }}
+                    {% else %}
+                        <span style="color: #a0aec0;">Never</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.875rem;" 
+                            onclick="deleteProvider({{ provider.id }}, '{{ provider.name }}')">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="alert alert-info">
+        No providers configured yet. Click "Add Provider" to get started!
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>How to Get a Refresh Token</h2>
+    <ol style="margin-left: 20px; color: #4a5568;">
+        <li style="margin-bottom: 10px;">
+            Log in to the <a href="https://console.truelayer.com/" target="_blank" style="color: #667eea;">TrueLayer Console</a>
+        </li>
+        <li style="margin-bottom: 10px;">
+            Create or select your application
+        </li>
+        <li style="margin-bottom: 10px;">
+            Use the "Auth Flow" tool to generate an access link
+        </li>
+        <li style="margin-bottom: 10px;">
+            Complete the authentication flow for your bank
+        </li>
+        <li style="margin-bottom: 10px;">
+            Copy the <strong>refresh_token</strong> from the response
+        </li>
+        <li style="margin-bottom: 10px;">
+            Add it here using the form above
+        </li>
+    </ol>
+    
+    <div class="alert alert-info" style="margin-top: 20px;">
+        <strong>💡 Tip:</strong> Refresh tokens typically last for 90 days and are automatically renewed during sync operations.
+        Make sure to set up automatic syncing to keep your tokens active!
+    </div>
+</div>
+
+<!-- Add Provider Modal -->
+<div id="addProviderModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add Provider</h2>
+            <span class="close" onclick="closeModal('addProviderModal')">&times;</span>
+        </div>
+        
+        <form id="addProviderForm" onsubmit="addProvider(event)">
+            <div class="form-group">
+                <label for="providerName">Provider Name *</label>
+                <input type="text" id="providerName" name="name" required 
+                       placeholder="e.g., Lloyds, AmEx, Revolut">
+                <small style="color: #718096;">A friendly name to identify this provider</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="accountType">Account Type *</label>
+                <select id="accountType" name="account_type" required>
+                    <option value="accounts">Bank Accounts</option>
+                    <option value="cards">Credit/Debit Cards</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="refreshToken">Refresh Token *</label>
+                <textarea id="refreshToken" name="refresh_token" required rows="4" 
+                          placeholder="Paste your TrueLayer refresh token here"></textarea>
+                <small style="color: #718096;">Obtain this from TrueLayer Console after authenticating</small>
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addProviderModal')">
+                    Cancel
+                </button>
+                <button type="submit" class="btn">
+                    Add Provider
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function addProvider(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const data = {
+        name: formData.get('name'),
+        account_type: formData.get('account_type'),
+        refresh_token: formData.get('refresh_token').trim()
+    };
+    
+    try {
+        const response = await fetch('/api/providers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showAlert('✓ Provider added successfully!', 'success');
+            closeModal('addProviderModal');
+            form.reset();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showAlert('✗ Error: ' + (result.error || 'Failed to add provider'), 'error');
+        }
+    } catch (error) {
+        showAlert('✗ Error: ' + error.message, 'error');
+    }
+}
+
+async function deleteProvider(providerId, providerName) {
+    if (!confirm(`Are you sure you want to delete provider "${providerName}"? This action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/providers/${providerId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showAlert('✓ Provider deleted successfully', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showAlert('✗ Error: ' + (result.error || 'Failed to delete provider'), 'error');
+        }
+    } catch (error) {
+        showAlert('✗ Error: ' + error.message, 'error');
+    }
+}
+</script>
+{% endblock %}

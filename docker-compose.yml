@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  truelayer-firefly:
+    build: .
+    container_name: truelayer-firefly
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # TrueLayer Configuration
+      - TRUELAYER_CLIENT_ID=${TRUELAYER_CLIENT_ID}
+      - TRUELAYER_CLIENT_SECRET=${TRUELAYER_CLIENT_SECRET}
+      
+      # Firefly III Configuration
+      - FIREFLY_URL=${FIREFLY_URL:-http://firefly:8080}
+      - FIREFLY_TOKEN=${FIREFLY_TOKEN}
+      
+      # Database (SQLite by default, stored in volume)
+      - DATABASE_URL=sqlite:////app/data/truelayer_firefly.db
+      
+      # Application Settings
+      - SYNC_INTERVAL_MINUTES=${SYNC_INTERVAL_MINUTES:-60}
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - DEBUG=${DEBUG:-false}
+      - TIMEZONE=${TIMEZONE:-Europe/London}
+    
+    volumes:
+      # Persist database
+      - ./data:/app/data
+    
+    networks:
+      - truelayer-net
+    
+    # Optional: depends on Firefly III if running in same stack
+    # depends_on:
+    #   - firefly
+
+networks:
+  truelayer-net:
+    driver: bridge

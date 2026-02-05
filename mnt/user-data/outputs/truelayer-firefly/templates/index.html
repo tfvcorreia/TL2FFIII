@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - TrueLayer → Firefly III{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <div class="stat-card">
+        <h3>Active Providers</h3>
+        <div class="value">{{ providers|length }}</div>
+    </div>
+    
+    <div class="stat-card" style="border-left-color: {% if firefly_configured %}#48bb78{% else %}#f56565{% endif %}">
+        <h3>Firefly III Status</h3>
+        <div class="value">
+            {% if firefly_configured %}
+                <span class="status status-success">✓ Connected</span>
+            {% else %}
+                <span class="status status-error">✗ Not Set Up</span>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="stat-card" style="border-left-color: #ecc94b">
+        <h3>Last Sync</h3>
+        <div class="value" style="font-size: 1.2rem;">
+            {% if sync_status.last_sync %}
+                {{ sync_status.last_sync }}
+            {% else %}
+                Never
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 30px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Quick Actions</h2>
+        <button class="btn btn-success" onclick="manualSync()" id="syncBtn">
+            <span id="syncBtnText">🔄 Sync Now</span>
+        </button>
+    </div>
+    
+    <div class="grid">
+        <a href="{{ url_for('providers') }}" class="btn btn-secondary" style="text-align: center;">
+            ➕ Add Provider
+        </a>
+        
+        <a href="{{ url_for('settings') }}" class="btn btn-secondary" style="text-align: center;">
+            ⚙️ Configure Firefly III
+        </a>
+    </div>
+</div>
+
+{% if not firefly_configured %}
+<div class="alert alert-info">
+    <strong>⚠️ Setup Required:</strong> Please configure your Firefly III connection in the <a href="{{ url_for('settings') }}" style="color: #2c5282; font-weight: 600;">Settings</a> page before syncing transactions.
+</div>
+{% endif %}
+
+{% if providers %}
+<div class="card">
+    <h2>Configured Providers</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Provider Name</th>
+                <th>Account Type</th>
+                <th>Last Sync</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for provider in providers %}
+            <tr>
+                <td><strong>{{ provider.name }}</strong></td>
+                <td>{{ provider.account_type|capitalize }}</td>
+                <td>
+                    {% if provider.last_sync %}
+                        {{ provider.last_sync }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </td>
+                <td>
+                    {% if provider.enabled %}
+                        <span class="status status-success">Active</span>
+                    {% else %}
+                        <span class="status status-warning">Disabled</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <h2>Getting Started</h2>
+    <p style="margin-bottom: 20px;">No providers configured yet. Add your first provider to start syncing transactions!</p>
+    <ol style="margin-left: 20px; margin-bottom: 20px;">
+        <li style="margin-bottom: 10px;">Obtain refresh tokens from TrueLayer for each of your financial institutions</li>
+        <li style="margin-bottom: 10px;">Add each provider using the "Providers" page</li>
+        <li style="margin-bottom: 10px;">Configure your Firefly III connection in Settings</li>
+        <li style="margin-bottom: 10px;">Run your first sync!</li>
+    </ol>
+    <a href="{{ url_for('providers') }}" class="btn">➕ Add Your First Provider</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function manualSync() {
+    const btn = document.getElementById('syncBtn');
+    const btnText = document.getElementById('syncBtnText');
+    const originalText = btnText.textContent;
+    
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="loading"></span> Syncing...';
+    
+    try {
+        const response = await fetch('/api/sync/manual', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showAlert('✓ Sync completed successfully!', 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert('✗ Sync failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        showAlert('✗ Sync failed: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = originalText;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  truelayer-firefly:
+    build: .
+    container_name: truelayer-firefly-sync
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data
+    environment:
+      - DATA_DIR=/data
+      - TZ=Europe/London
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
