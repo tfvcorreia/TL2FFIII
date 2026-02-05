@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrueLayer → Firefly III Sync</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+        
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .btn-success {
+            background: #10b981;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        .provider-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .provider-item {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .provider-info h3 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .provider-info p {
+            color: #666;
+            font-size: 0.85em;
+        }
+        
+        .provider-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .badge-accounts {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .badge-cards {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            margin-left: 10px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+        
+        .sync-status {
+            display: none;
+            margin-top: 15px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .provider-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .provider-actions {
+                margin-top: 10px;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔄 TrueLayer → Firefly III</h1>
+            <p class="subtitle">Automated transaction sync for all your financial accounts</p>
+        </header>
+        
+        <div class="card">
+            <h2>⚙️ Firefly III Configuration</h2>
+            <div id="firefly-alert"></div>
+            <form id="firefly-config-form">
+                <div class="form-group">
+                    <label for="firefly_url">Firefly III URL</label>
+                    <input type="text" id="firefly_url" name="firefly_url" 
+                           placeholder="https://firefly.example.com" 
+                           value="{{ config.firefly_url or '' }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="firefly_token">Personal Access Token</label>
+                    <input type="password" id="firefly_token" name="firefly_token" 
+                           placeholder="eyJ0eXAiOiJKV1QiLCJhbGc..." 
+                           value="{{ config.firefly_token or '' }}" required>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="sync_interval">Sync Interval (seconds)</label>
+                        <input type="number" id="sync_interval" name="sync_interval" 
+                               value="{{ config.sync_interval or 3600 }}" min="60" required>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            Auto Sync
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto_sync" name="auto_sync" 
+                                       {{ 'checked' if config.auto_sync else '' }}>
+                                <span class="slider"></span>
+                            </label>
+                        </label>
+                    </div>
+                </div>
+                <button type="submit" class="btn">Save Configuration</button>
+                <button type="button" class="btn btn-secondary" onclick="testFirefly()">Test Connection</button>
+            </form>
+        </div>
+        
+        <div class="card">
+            <h2>🏦 Providers</h2>
+            <div id="provider-alert"></div>
+            
+            <div class="provider-list" id="provider-list">
+                {% if providers %}
+                    {% for name, data in providers.items() %}
+                    <div class="provider-item" data-provider="{{ name }}">
+                        <div class="provider-info">
+                            <h3>
+                                {{ name }}
+                                <span class="badge badge-{{ data.type }}">{{ data.type }}</span>
+                            </h3>
+                            <p>Client ID: {{ data.client_id[:20] }}...</p>
+                        </div>
+                        <div class="provider-actions">
+                            <button class="btn btn-success" onclick="syncProvider('{{ name }}')">Sync Now</button>
+                            <button class="btn btn-danger" onclick="deleteProvider('{{ name }}')">Delete</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="color: #666; text-align: center; padding: 20px;">
+                        No providers configured yet. Add your first provider below.
+                    </p>
+                {% endif %}
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button class="btn" onclick="showAddProvider()">+ Add Provider</button>
+                <button class="btn btn-success" onclick="syncAll()">Sync All Providers</button>
+            </div>
+            
+            <div id="sync-status" class="sync-status"></div>
+        </div>
+        
+        <div class="card" id="add-provider-form" style="display: none;">
+            <h2>➕ Add Provider</h2>
+            <form id="provider-form">
+                <div class="form-group">
+                    <label for="provider_name">Provider Name</label>
+                    <input type="text" id="provider_name" name="name" 
+                           placeholder="e.g., Lloyds, AmEx, Revolut" required>
+                </div>
+                <div class="form-group">
+                    <label for="client_id">Client ID</label>
+                    <input type="text" id="client_id" name="client_id" 
+                           placeholder="test-xxxxx" required>
+                </div>
+                <div class="form-group">
+                    <label for="client_secret">Client Secret</label>
+                    <input type="password" id="client_secret" name="client_secret" 
+                           placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required>
+                </div>
+                <div class="form-group">
+                    <label for="refresh_token">Refresh Token</label>
+                    <input type="password" id="refresh_token" name="refresh_token" 
+                           placeholder="Enter your refresh token" required>
+                </div>
+                <div class="form-group">
+                    <label for="provider_type">Account Type</label>
+                    <select id="provider_type" name="type" required>
+                        <option value="accounts">Accounts</option>
+                        <option value="cards">Cards</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Save Provider</button>
+                <button type="button" class="btn btn-secondary" onclick="cancelAddProvider()">Cancel</button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // Firefly III Configuration
+        document.getElementById('firefly-config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                firefly_url: formData.get('firefly_url'),
+                firefly_token: formData.get('firefly_token'),
+                sync_interval: parseInt(formData.get('sync_interval')),
+                auto_sync: document.getElementById('auto_sync').checked
+            };
+            
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                showAlert('firefly-alert', 'Configuration saved successfully!', 'success');
+            } catch (error) {
+                showAlert('firefly-alert', 'Error saving configuration: ' + error.message, 'error');
+            }
+        });
+        
+        // Provider Management
+        document.getElementById('provider-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                name: formData.get('name'),
+                client_id: formData.get('client_id'),
+                client_secret: formData.get('client_secret'),
+                refresh_token: formData.get('refresh_token'),
+                type: formData.get('type')
+            };
+            
+            try {
+                const response = await fetch('/api/providers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                showAlert('provider-alert', 'Provider added successfully!', 'success');
+                e.target.reset();
+                cancelAddProvider();
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                showAlert('provider-alert', 'Error adding provider: ' + error.message, 'error');
+            }
+        });
+        
+        function showAddProvider() {
+            document.getElementById('add-provider-form').style.display = 'block';
+            document.getElementById('provider_name').focus();
+        }
+        
+        function cancelAddProvider() {
+            document.getElementById('add-provider-form').style.display = 'none';
+            document.getElementById('provider-form').reset();
+        }
+        
+        async function deleteProvider(name) {
+            if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+            
+            try {
+                await fetch(`/api/providers/${name}`, { method: 'DELETE' });
+                showAlert('provider-alert', 'Provider deleted successfully!', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                showAlert('provider-alert', 'Error deleting provider: ' + error.message, 'error');
+            }
+        }
+        
+        async function syncProvider(name) {
+            showSyncStatus(`Syncing ${name}...`, true);
+            
+            try {
+                const response = await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider: name })
+                });
+                
+                const result = await response.json();
+                if (result.error) {
+                    showSyncStatus(`Error: ${result.error}`, false);
+                } else {
+                    showSyncStatus(`✓ Synced ${result.synced} transactions from ${name}`, false);
+                }
+            } catch (error) {
+                showSyncStatus(`Error: ${error.message}`, false);
+            }
+        }
+        
+        async function syncAll() {
+            showSyncStatus('Syncing all providers...', true);
+            
+            try {
+                const response = await fetch('/api/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                const results = await response.json();
+                let total = 0;
+                let errors = [];
+                
+                for (const [provider, result] of Object.entries(results)) {
+                    if (result.error) {
+                        errors.push(`${provider}: ${result.error}`);
+                    } else {
+                        total += result.synced;
+                    }
+                }
+                
+                let message = `✓ Synced ${total} total transactions`;
+                if (errors.length > 0) {
+                    message += `<br>Errors: ${errors.join(', ')}`;
+                }
+                
+                showSyncStatus(message, false);
+            } catch (error) {
+                showSyncStatus(`Error: ${error.message}`, false);
+            }
+        }
+        
+        async function testFirefly() {
+            showAlert('firefly-alert', 'Testing connection...', 'info');
+            
+            try {
+                const response = await fetch('/api/test-firefly', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('firefly-alert', '✓ Connection successful! Firefly III version: ' + 
+                             (result.data.data?.version || 'unknown'), 'success');
+                } else {
+                    showAlert('firefly-alert', 'Connection failed: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('firefly-alert', 'Connection failed: ' + error.message, 'error');
+            }
+        }
+        
+        function showAlert(containerId, message, type) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+        
+        function showSyncStatus(message, loading) {
+            const status = document.getElementById('sync-status');
+            status.style.display = 'block';
+            
+            if (loading) {
+                status.innerHTML = `<div class="alert alert-info"><span class="spinner"></span>${message}</div>`;
+            } else {
+                status.innerHTML = `<div class="alert alert-success">${message}</div>`;
+                setTimeout(() => status.style.display = 'none', 5000);
+            }
+        }
+    </script>
+</body>
+</html>

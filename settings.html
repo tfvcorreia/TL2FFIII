@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - TrueLayer → Firefly III{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Firefly III Configuration</h2>
+    <p style="margin-bottom: 20px; color: #718096;">
+        Configure your Firefly III instance to enable transaction syncing.
+    </p>
+    
+    <form id="fireflyConfigForm" onsubmit="saveFireflyConfig(event)">
+        <div class="form-group">
+            <label for="fireflyUrl">Firefly III URL *</label>
+            <input type="url" id="fireflyUrl" name="url" required 
+                   placeholder="https://your-firefly-instance.com"
+                   value="{% if firefly_config %}{{ firefly_config.url }}{% endif %}">
+            <small style="color: #718096;">The full URL of your Firefly III installation</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="fireflyToken">Personal Access Token *</label>
+            <input type="password" id="fireflyToken" name="token" required 
+                   placeholder="Enter your Firefly III personal access token"
+                   {% if firefly_config %}value="••••••••••••••••"{% endif %}>
+            <small style="color: #718096;">
+                Create this in Firefly III: Profile → OAuth → Personal Access Tokens
+            </small>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-success">
+                Save Configuration
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="testConnection()">
+                Test Connection
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Sync Schedule</h2>
+    <p style="margin-bottom: 20px; color: #718096;">
+        Transactions are automatically synced using a cron schedule.
+    </p>
+    
+    <div class="alert alert-info">
+        <strong>Current Schedule:</strong> <code>{{ sync_schedule }}</code>
+        <br><br>
+        This means: <strong>Every 6 hours</strong>
+        <br><br>
+        To change the schedule, update the <code>SYNC_SCHEDULE</code> environment variable in your Docker configuration
+        and restart the container.
+    </div>
+    
+    <div style="margin-top: 20px;">
+        <h3 style="margin-bottom: 10px;">Common Cron Schedules:</h3>
+        <ul style="margin-left: 20px; color: #4a5568;">
+            <li style="margin-bottom: 8px;"><code>0 */6 * * *</code> - Every 6 hours (default)</li>
+            <li style="margin-bottom: 8px;"><code>0 */12 * * *</code> - Every 12 hours</li>
+            <li style="margin-bottom: 8px;"><code>0 0 * * *</code> - Daily at midnight</li>
+            <li style="margin-bottom: 8px;"><code>0 6 * * *</code> - Daily at 6 AM</li>
+            <li style="margin-bottom: 8px;"><code>0 */4 * * *</code> - Every 4 hours</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Environment Variables</h2>
+    <p style="margin-bottom: 20px; color: #718096;">
+        These are configured in your Docker environment:
+    </p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Variable</th>
+                <th>Description</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>TRUELAYER_CLIENT_ID</code></td>
+                <td>Your TrueLayer application client ID</td>
+                <td>
+                    <span class="status status-success">✓ Set</span>
+                </td>
+            </tr>
+            <tr>
+                <td><code>TRUELAYER_CLIENT_SECRET</code></td>
+                <td>Your TrueLayer application client secret</td>
+                <td>
+                    <span class="status status-success">✓ Set</span>
+                </td>
+            </tr>
+            <tr>
+                <td><code>SYNC_SCHEDULE</code></td>
+                <td>Cron expression for automatic syncing</td>
+                <td>
+                    <span class="status status-success">✓ Set</span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function saveFireflyConfig(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const data = {
+        url: formData.get('url').replace(/\/$/, ''), // Remove trailing slash
+        token: formData.get('token')
+    };
+    
+    // Don't send masked token
+    if (data.token.includes('•')) {
+        delete data.token;
+    }
+    
+    try {
+        const response = await fetch('/api/firefly/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showAlert('✓ Firefly III configured successfully! Version: ' + result.version, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert('✗ Error: ' + (result.error || 'Failed to configure Firefly III'), 'error');
+        }
+    } catch (error) {
+        showAlert('✗ Error: ' + error.message, 'error');
+    }
+}
+
+async function testConnection() {
+    const url = document.getElementById('fireflyUrl').value;
+    const token = document.getElementById('fireflyToken').value;
+    
+    if (!url || !token) {
+        showAlert('Please enter both URL and token first', 'error');
+        return;
+    }
+    
+    // Don't test with masked token
+    if (token.includes('•')) {
+        showAlert('Please re-enter your token to test the connection', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/firefly/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ url: url.replace(/\/$/, ''), token })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showAlert('✓ Connection successful! Firefly III version: ' + result.version, 'success');
+        } else {
+            showAlert('✗ Connection failed: ' + (result.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        showAlert('✗ Connection failed: ' + error.message, 'error');
+    }
+}
+</script>
+{% endblock %}
