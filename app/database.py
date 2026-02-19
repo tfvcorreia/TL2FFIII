@@ -1,1 +1,21 @@
-from sqlalchemy import create_engine, scoped_session, sessionmaker\nfrom sqlalchemy.ext.declarative import declarative_base\nfrom sqlalchemy.orm import sessionmaker\n\nDATABASE_URL = "sqlite:///./app.db"\n\nengine = create_engine(DATABASE_URL)\ndb_session = scoped_session(sessionmaker(bind=engine))\nBase = declarative_base()\n\ndef get_db():\n    db = db_session()\n    try:\n        yield db\n    finally:\n        db.close()\n\ndef init_db():\n    from app.models import *  # Ensure models are registered\n    Base.metadata.create_all(bind=engine)\n
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+Base = declarative_base()
+
+def get_engine():
+    return create_engine(app.config['DATABASE_URL'])
+
+Session = sessionmaker(bind=get_engine())
+
+# Example Model
+class ExampleModel(Base):
+    __tablename__ = 'example'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+
+# Initialize Database
+if __name__ == '__main__':
+    Base.metadata.create_all(get_engine())
