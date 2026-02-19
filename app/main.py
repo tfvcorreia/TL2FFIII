@@ -165,7 +165,7 @@ async def index(request: Request, db: Session = Depends(get_db)):
     # Test Firefly connection
     firefly_connected = firefly_service.test_connection()
     
-    return templates.TemplateResponse("main.html", {
+    return templates.TemplateResponse("base.html", {
         "request": request,
         "providers": providers,
         "sync_states": sync_states,
