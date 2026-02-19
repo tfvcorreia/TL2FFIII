@@ -1,21 +1,12 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+import SQLAlchemy
+from app.config import settings
 
-Base = declarative_base()
+def get_db():
+    db = SQLAlchemy()
+    # Assuming use of the settings.database_url for database connection
+    db.init_app(settings.database_url)
+    return db
 
-def get_engine():
-    return create_engine(app.config['DATABASE_URL'])
-
-Session = sessionmaker(bind=get_engine())
-
-# Example Model
-class ExampleModel(Base):
-    __tablename__ = 'example'
-
-    id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
-
-# Initialize Database
-if __name__ == '__main__':
-    Base.metadata.create_all(get_engine())
+def init_db():
+    # Logic to initialize the database would go here
+    pass
