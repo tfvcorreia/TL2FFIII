@@ -1,23 +1,27 @@
-# Assuming the content here would look something like this:
-
 from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-
-# Import the database URL from your app configuration
 from app.config import settings
 
-# Create an engine instance using the database URL
-engine = create_engine(settings.database_url)
+engine = create_engine(
+    settings.database_url,
+    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {}
+)
 
-# Create a configured "Session" class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Create a session
-# To be used in dependency injection
+Base = declarative_base()
+
 
 def get_db():
+    """Dependency for FastAPI routes"""
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+
+def init_db():
+    """Initialize database tables"""
+    Base.metadata.create_all(bind=engine)
