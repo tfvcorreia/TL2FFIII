@@ -1,186 +1,504 @@
-{% extends "base.html" %}
-
-{% block title %}Settings - TrueLayer → Firefly III{% endblock %}
-
-{% block content %}
-<div class="card">
-    <h2>Firefly III Configuration</h2>
-    <p style="margin-bottom: 20px; color: #718096;">
-        Configure your Firefly III instance to enable transaction syncing.
-    </p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - TrueLayer → Firefly III</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f7fa;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+        
+        .nav {
+            margin-top: 15px;
+        }
+        
+        .nav a {
+            color: white;
+            text-decoration: none;
+            margin-right: 20px;
+            opacity: 0.9;
+        }
+        
+        .nav a:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
+        
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #4b5563;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            min-height: 80px;
+            font-family: monospace;
+        }
+        
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #6c757d;
+            font-size: 13px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            margin-right: 10px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.connected {
+            background: #10b981;
+        }
+        
+        .status-indicator.disconnected {
+            background: #ef4444;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+        
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+        
+        .connection-status {
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .connection-status h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🏦 TrueLayer → Firefly III Integration</h1>
+            <div class="nav">
+                <a href="/">← Back to Dashboard</a>
+            </div>
+        </div>
+    </header>
     
-    <form id="fireflyConfigForm" onsubmit="saveFireflyConfig(event)">
-        <div class="form-group">
-            <label for="fireflyUrl">Firefly III URL *</label>
-            <input type="url" id="fireflyUrl" name="url" required 
-                   placeholder="https://your-firefly-instance.com"
-                   value="{% if firefly_config %}{{ firefly_config.url }}{% endif %}">
-            <small style="color: #718096;">The full URL of your Firefly III installation</small>
+    <div class="container">
+        <div id="alertContainer"></div>
+        
+        <!-- Firefly III Configuration -->
+        <div class="section">
+            <h2>🔥 Firefly III Configuration</h2>
+            
+            <div class="connection-status">
+                <h3>Current Status</h3>
+                <p>
+                    <span class="status-indicator" id="fireflyStatusIndicator"></span>
+                    <span id="fireflyStatusText">Checking...</span>
+                </p>
+            </div>
+            
+            <form id="fireflyForm">
+                <div class="form-group">
+                    <label>Firefly III URL *</label>
+                    <input type="url" name="firefly_url" id="firefly_url" 
+                           placeholder="http://firefly:8080 or http://192.168.1.100:8080" required>
+                    <small>Full URL to your Firefly III instance (include http:// or https://)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Personal Access Token *</label>
+                    <textarea name="firefly_token" id="firefly_token" 
+                              placeholder="Paste your Firefly III Personal Access Token here" required></textarea>
+                    <small>Get this from Firefly III: Options → Profile → OAuth → Personal Access Tokens → Create New Token</small>
+                </div>
+                
+                <div class="actions">
+                    <button type="button" class="btn btn-secondary" onclick="testFireflyConnection()">
+                        🔍 Test Connection
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        💾 Save Configuration
+                    </button>
+                </div>
+            </form>
         </div>
         
-        <div class="form-group">
-            <label for="fireflyToken">Personal Access Token *</label>
-            <input type="password" id="fireflyToken" name="token" required 
-                   placeholder="Enter your Firefly III personal access token"
-                   {% if firefly_config %}value="••••••••••••••••"{% endif %}>
-            <small style="color: #718096;">
-                Create this in Firefly III: Profile → OAuth → Personal Access Tokens
-            </small>
+        <!-- TrueLayer Configuration -->
+        <div class="section">
+            <h2>🔐 TrueLayer API Configuration</h2>
+            
+            <form id="truelayerForm">
+                <div class="form-group">
+                    <label>Client ID *</label>
+                    <input type="text" name="truelayer_client_id" id="truelayer_client_id" 
+                           placeholder="Your TrueLayer Client ID" required>
+                    <small>From TrueLayer Console: https://console.truelayer.com/</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Client Secret *</label>
+                    <input type="password" name="truelayer_client_secret" id="truelayer_client_secret" 
+                           placeholder="Your TrueLayer Client Secret" required>
+                    <small>Keep this secure - it's used to refresh access tokens</small>
+                </div>
+                
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">
+                        💾 Save Configuration
+                    </button>
+                </div>
+            </form>
         </div>
         
-        <div style="display: flex; gap: 10px;">
-            <button type="submit" class="btn btn-success">
-                Save Configuration
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="testConnection()">
-                Test Connection
-            </button>
+        <!-- App Settings -->
+        <div class="section">
+            <h2>⚙️ Application Settings</h2>
+            
+            <form id="appSettingsForm">
+                <div class="form-group">
+                    <label>Sync Interval (minutes)</label>
+                    <input type="number" name="sync_interval" id="sync_interval" 
+                           value="60" min="5" max="1440">
+                    <small>How often to automatically sync transactions (5-1440 minutes)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Timezone</label>
+                    <select name="timezone" id="timezone">
+                        <option value="Europe/London">Europe/London (UK)</option>
+                        <option value="Europe/Paris">Europe/Paris</option>
+                        <option value="America/New_York">America/New_York</option>
+                        <option value="America/Los_Angeles">America/Los_Angeles</option>
+                        <option value="UTC">UTC</option>
+                    </select>
+                    <small>Timezone for displaying timestamps</small>
+                </div>
+                
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">
+                        💾 Save Settings
+                    </button>
+                </div>
+            </form>
         </div>
-    </form>
-</div>
-
-<div class="card">
-    <h2>Sync Schedule</h2>
-    <p style="margin-bottom: 20px; color: #718096;">
-        Transactions are automatically synced using a cron schedule.
-    </p>
-    
-    <div class="alert alert-info">
-        <strong>Current Schedule:</strong> <code>{{ sync_schedule }}</code>
-        <br><br>
-        This means: <strong>Every 6 hours</strong>
-        <br><br>
-        To change the schedule, update the <code>SYNC_SCHEDULE</code> environment variable in your Docker configuration
-        and restart the container.
+        
+        <!-- Help Section -->
+        <div class="section">
+            <h2>❓ Need Help?</h2>
+            
+            <h3 style="margin-top: 15px; margin-bottom: 10px;">Getting Your Firefly III Token:</h3>
+            <ol style="margin-left: 20px; line-height: 2;">
+                <li>Open Firefly III in your browser</li>
+                <li>Go to <strong>Options → Profile → OAuth</strong></li>
+                <li>Scroll to <strong>Personal Access Tokens</strong></li>
+                <li>Click <strong>Create New Token</strong></li>
+                <li>Give it a name like "TrueLayer Integration"</li>
+                <li>Click <strong>Create</strong></li>
+                <li>Copy the token (you'll only see it once!)</li>
+                <li>Paste it above</li>
+            </ol>
+            
+            <h3 style="margin-top: 20px; margin-bottom: 10px;">Firefly III URL Examples:</h3>
+            <ul style="margin-left: 20px; line-height: 2;">
+                <li><code>http://firefly:8080</code> - If running on same Docker network</li>
+                <li><code>http://192.168.1.100:8080</code> - If on same machine but different network</li>
+                <li><code>https://firefly.example.com</code> - If using a domain with SSL</li>
+            </ul>
+        </div>
     </div>
     
-    <div style="margin-top: 20px;">
-        <h3 style="margin-bottom: 10px;">Common Cron Schedules:</h3>
-        <ul style="margin-left: 20px; color: #4a5568;">
-            <li style="margin-bottom: 8px;"><code>0 */6 * * *</code> - Every 6 hours (default)</li>
-            <li style="margin-bottom: 8px;"><code>0 */12 * * *</code> - Every 12 hours</li>
-            <li style="margin-bottom: 8px;"><code>0 0 * * *</code> - Daily at midnight</li>
-            <li style="margin-bottom: 8px;"><code>0 6 * * *</code> - Daily at 6 AM</li>
-            <li style="margin-bottom: 8px;"><code>0 */4 * * *</code> - Every 4 hours</li>
-        </ul>
-    </div>
-</div>
-
-<div class="card">
-    <h2>Environment Variables</h2>
-    <p style="margin-bottom: 20px; color: #718096;">
-        These are configured in your Docker environment:
-    </p>
-    
-    <table>
-        <thead>
-            <tr>
-                <th>Variable</th>
-                <th>Description</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td><code>TRUELAYER_CLIENT_ID</code></td>
-                <td>Your TrueLayer application client ID</td>
-                <td>
-                    <span class="status status-success">✓ Set</span>
-                </td>
-            </tr>
-            <tr>
-                <td><code>TRUELAYER_CLIENT_SECRET</code></td>
-                <td>Your TrueLayer application client secret</td>
-                <td>
-                    <span class="status status-success">✓ Set</span>
-                </td>
-            </tr>
-            <tr>
-                <td><code>SYNC_SCHEDULE</code></td>
-                <td>Cron expression for automatic syncing</td>
-                <td>
-                    <span class="status status-success">✓ Set</span>
-                </td>
-            </tr>
-        </tbody>
-    </table>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-async function saveFireflyConfig(event) {
-    event.preventDefault();
-    
-    const form = event.target;
-    const formData = new FormData(form);
-    
-    const data = {
-        url: formData.get('url').replace(/\/$/, ''), // Remove trailing slash
-        token: formData.get('token')
-    };
-    
-    // Don't send masked token
-    if (data.token.includes('•')) {
-        delete data.token;
-    }
-    
-    try {
-        const response = await fetch('/api/firefly/config', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
+    <script>
+        // Load current settings on page load
+        window.addEventListener('DOMContentLoaded', loadSettings);
+        
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                
+                if (data.firefly_url) {
+                    document.getElementById('firefly_url').value = data.firefly_url;
+                }
+                if (data.firefly_token) {
+                    document.getElementById('firefly_token').value = '**********'; // Don't show full token
+                }
+                if (data.truelayer_client_id) {
+                    document.getElementById('truelayer_client_id').value = data.truelayer_client_id;
+                }
+                if (data.sync_interval) {
+                    document.getElementById('sync_interval').value = data.sync_interval;
+                }
+                if (data.timezone) {
+                    document.getElementById('timezone').value = data.timezone;
+                }
+                
+                // Check Firefly connection status
+                checkFireflyStatus();
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+        
+        async function checkFireflyStatus() {
+            try {
+                const response = await fetch('/api/firefly/test');
+                const data = await response.json();
+                
+                const indicator = document.getElementById('fireflyStatusIndicator');
+                const text = document.getElementById('fireflyStatusText');
+                
+                if (data.connected) {
+                    indicator.className = 'status-indicator connected';
+                    text.textContent = 'Connected';
+                } else {
+                    indicator.className = 'status-indicator disconnected';
+                    text.textContent = 'Disconnected - Please configure below';
+                }
+            } catch (error) {
+                const indicator = document.getElementById('fireflyStatusIndicator');
+                const text = document.getElementById('fireflyStatusText');
+                indicator.className = 'status-indicator disconnected';
+                text.textContent = 'Error checking status';
+            }
+        }
+        
+        async function testFireflyConnection() {
+            const url = document.getElementById('firefly_url').value;
+            const token = document.getElementById('firefly_token').value;
+            
+            if (!url || !token) {
+                showAlert('Please enter both URL and token', 'error');
+                return;
+            }
+            
+            showAlert('Testing connection...', 'info');
+            
+            try {
+                const response = await fetch('/api/settings/test-firefly', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ firefly_url: url, firefly_token: token })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✅ Connection successful!', 'success');
+                    checkFireflyStatus();
+                } else {
+                    showAlert('❌ Connection failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Connection failed: ' + error.message, 'error');
+            }
+        }
+        
+        // Firefly form submission
+        document.getElementById('fireflyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/settings/firefly', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showAlert('✅ Firefly III configuration saved!', 'success');
+                    checkFireflyStatus();
+                } else {
+                    showAlert('❌ Failed to save configuration', 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+            }
         });
         
-        const result = await response.json();
-        
-        if (response.ok) {
-            showAlert('✓ Firefly III configured successfully! Version: ' + result.version, 'success');
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            showAlert('✗ Error: ' + (result.error || 'Failed to configure Firefly III'), 'error');
-        }
-    } catch (error) {
-        showAlert('✗ Error: ' + error.message, 'error');
-    }
-}
-
-async function testConnection() {
-    const url = document.getElementById('fireflyUrl').value;
-    const token = document.getElementById('fireflyToken').value;
-    
-    if (!url || !token) {
-        showAlert('Please enter both URL and token first', 'error');
-        return;
-    }
-    
-    // Don't test with masked token
-    if (token.includes('•')) {
-        showAlert('Please re-enter your token to test the connection', 'error');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/firefly/config', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ url: url.replace(/\/$/, ''), token })
+        // TrueLayer form submission
+        document.getElementById('truelayerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/settings/truelayer', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showAlert('✅ TrueLayer configuration saved!', 'success');
+                } else {
+                    showAlert('❌ Failed to save configuration', 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+            }
         });
         
-        const result = await response.json();
+        // App settings form submission
+        document.getElementById('appSettingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/api/settings/app', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showAlert('✅ Application settings saved!', 'success');
+                } else {
+                    showAlert('❌ Failed to save settings', 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+            }
+        });
         
-        if (response.ok) {
-            showAlert('✓ Connection successful! Firefly III version: ' + result.version, 'success');
-        } else {
-            showAlert('✗ Connection failed: ' + (result.error || 'Unknown error'), 'error');
+        function showAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            container.innerHTML = '';
+            container.appendChild(alert);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
         }
-    } catch (error) {
-        showAlert('✗ Connection failed: ' + error.message, 'error');
-    }
-}
-</script>
-{% endblock %}
+    </script>
+</body>
+</html>
