@@ -173,6 +173,10 @@ async def index(request: Request, db: Session = Depends(get_db)):
         "firefly_connected": firefly_connected
     })
 
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    """Settings page"""
+    return templates.TemplateResponse("settings.html", {"request": request})
 
 # ============================================================================
 # API ROUTES - PROVIDERS
