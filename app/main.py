@@ -8,9 +8,11 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import logging
+import json
+import requests
 
 from app.database import get_db, init_db
-from app.models import Provider, SyncState, SyncLog
+from app.models import Provider, SyncState, SyncLog, Settings
 from app.services.truelayer import TrueLayerService
 from app.services.firefly import FireflyService
 from app.config import settings
@@ -31,6 +33,35 @@ firefly_service = FireflyService()
 
 # Background scheduler for automatic syncs
 scheduler = BackgroundScheduler()
+
+
+# ============================================================================
+# SETTINGS HELPER FUNCTIONS
+# ============================================================================
+
+def get_setting(db: Session, key: str, default=None):
+    """Get a setting from database"""
+    setting = db.query(Settings).filter(Settings.key == key).first()
+    if setting:
+        try:
+            return json.loads(setting.value) if setting.value else default
+        except:
+            return setting.value
+    return default
+
+def set_setting(db: Session, key: str, value):
+    """Save a setting to database"""
+    setting = db.query(Settings).filter(Settings.key == key).first()
+    if not setting:
+        setting = Settings(key=key)
+        db.add(setting)
+    
+    if not isinstance(value, str):
+        value = json.dumps(value)
+    
+    setting.value = value
+    setting.updated_at = datetime.utcnow()
+    db.commit()
 
 
 # ============================================================================
@@ -328,10 +359,26 @@ async def sync_status(db: Session = Depends(get_db)):
 # ============================================================================
 
 @app.get("/api/firefly/test")
-async def test_firefly():
-    """Test Firefly III connection"""
-    connected = firefly_service.test_connection()
-    return {"connected": connected}
+async def test_firefly(db: Session = Depends(get_db)):
+    """Test Firefly III connection using saved settings"""
+    firefly_url = get_setting(db, "firefly_url")
+    firefly_token = get_setting(db, "firefly_token")
+    
+    if not firefly_url or not firefly_token:
+        return {"connected": False}
+    
+    try:
+        response = requests.get(
+            f"{firefly_url}/api/v1/about",
+            headers={
+                "Authorization": f"Bearer {firefly_token}",
+                "Accept": "application/json"
+            },
+            timeout=10
+        )
+        return {"connected": response.status_code == 200}
+    except:
+        return {"connected": False}
 
 
 @app.get("/api/firefly/accounts")
@@ -341,6 +388,128 @@ async def get_firefly_accounts():
         accounts = firefly_service.get_accounts()
         return {"status": "success", "accounts": accounts}
     except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ============================================================================
+# API ROUTES - SETTINGS
+# ============================================================================
+
+@app.get("/api/settings")
+async def get_settings(db: Session = Depends(get_db)):
+    """Get current settings"""
+    return {
+        "firefly_url": get_setting(db, "firefly_url", settings.firefly_url),
+        "firefly_token": "configured" if get_setting(db, "firefly_token") else None,
+        "truelayer_client_id": get_setting(db, "truelayer_client_id", settings.truelayer_client_id),
+        "sync_interval": get_setting(db, "sync_interval", settings.sync_interval_minutes),
+        "timezone": get_setting(db, "timezone", settings.timezone)
+    }
+
+
+@app.post("/api/settings/test-firefly")
+async def test_firefly_settings(request: Request):
+    """Test Firefly III connection with provided settings"""
+    try:
+        data = await request.json()
+        firefly_url = data.get("firefly_url", "").rstrip('/')
+        firefly_token = data.get("firefly_token", "")
+        
+        if not firefly_url or not firefly_token:
+            return {"success": False, "error": "URL and token are required"}
+        
+        response = requests.get(
+            f"{firefly_url}/api/v1/about",
+            headers={
+                "Authorization": f"Bearer {firefly_token}",
+                "Accept": "application/json"
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return {"success": True, "message": "Connection successful"}
+        else:
+            return {"success": False, "error": f"HTTP {response.status_code}"}
+            
+    except requests.exceptions.ConnectionError:
+        return {"success": False, "error": "Cannot connect to Firefly III. Check the URL."}
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Connection timed out"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/settings/firefly")
+async def save_firefly_settings(request: Request, db: Session = Depends(get_db)):
+    """Save Firefly III configuration"""
+    try:
+        data = await request.json()
+        
+        firefly_url = data.get("firefly_url", "").rstrip('/')
+        firefly_token = data.get("firefly_token", "")
+        
+        set_setting(db, "firefly_url", firefly_url)
+        set_setting(db, "firefly_token", firefly_token)
+        
+        # Update the firefly service
+        firefly_service.base_url = firefly_url
+        firefly_service.token = firefly_token
+        firefly_service.headers = {
+            "Authorization": f"Bearer {firefly_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to save Firefly settings: {str(e)}")
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/settings/truelayer")
+async def save_truelayer_settings(request: Request, db: Session = Depends(get_db)):
+    """Save TrueLayer API configuration"""
+    try:
+        data = await request.json()
+        
+        set_setting(db, "truelayer_client_id", data.get("truelayer_client_id"))
+        set_setting(db, "truelayer_client_secret", data.get("truelayer_client_secret"))
+        
+        truelayer_service.client_id = data.get("truelayer_client_id")
+        truelayer_service.client_secret = data.get("truelayer_client_secret")
+        
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to save TrueLayer settings: {str(e)}")
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/settings/app")
+async def save_app_settings(request: Request, db: Session = Depends(get_db)):
+    """Save application settings"""
+    try:
+        data = await request.json()
+        
+        if "sync_interval" in data:
+            interval = int(data["sync_interval"])
+            set_setting(db, "sync_interval", interval)
+            
+            if scheduler.running:
+                scheduler.remove_job("sync_job")
+                scheduler.add_job(
+                    scheduled_sync,
+                    trigger=IntervalTrigger(minutes=interval),
+                    id="sync_job",
+                    replace_existing=True
+                )
+        
+        if "timezone" in data:
+            set_setting(db, "timezone", data["timezone"])
+        
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to save app settings: {str(e)}")
         raise HTTPException(500, str(e))
 
 
