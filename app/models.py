@@ -51,3 +51,12 @@ class SyncLog(Base):
     transactions_synced = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
     details = Column(JSON, default={})
+
+class Settings(Base):
+    """Stores application settings configurable via the UI"""
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True, nullable=False)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
