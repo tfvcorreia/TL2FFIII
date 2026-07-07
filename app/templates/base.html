@@ -152,6 +152,11 @@
             color: white;
         }
         
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+        
         .form-group {
             margin-bottom: 15px;
         }
@@ -274,6 +279,7 @@
             display: flex;
             gap: 10px;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
         
         .empty-state {
@@ -390,6 +396,7 @@
                             <button class="btn btn-secondary" onclick="toggleProvider({{ provider.id }})">
                                 {% if provider.enabled %}Disable{% else %}Enable{% endif %}
                             </button>
+                            <button class="btn btn-warning" onclick="openReauthModal({{ provider.id }}, '{{ provider.name }}')">🔑 Reauth</button>
                             <button class="btn btn-danger" onclick="deleteProvider({{ provider.id }})">Delete</button>
                         </td>
                     </tr>
@@ -508,10 +515,47 @@
             </form>
         </div>
     </div>
+
+    <!-- Re-authenticate Provider Modal -->
+    <div id="reauthModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Re-insert Authentication Keys</h2>
+                <button class="close-btn" onclick="closeModal('reauthModal')">&times;</button>
+            </div>
+            <form id="reauthForm" onsubmit="submitReauth(event)">
+                <p style="margin-bottom: 20px; color: #6c757d;">
+                    Update authentication keys for <strong id="providerNameDisplay"></strong>. 
+                    Get fresh tokens from <a href="https://console.truelayer.com/" target="_blank" style="color: #667eea;">TrueLayer Console</a>.
+                </p>
+                <div class="form-group">
+                    <label>Access Token *</label>
+                    <textarea name="access_token" required placeholder="Paste your new access token here"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Refresh Token *</label>
+                    <textarea name="refresh_token" required placeholder="Paste your new refresh token here"></textarea>
+                </div>
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">Update Keys</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('reauthModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
     
     <script>
+        let currentProviderId = null;
+
         function openAddProviderModal() {
             document.getElementById('addProviderModal').classList.add('active');
+        }
+
+        function openReauthModal(providerId, providerName) {
+            currentProviderId = providerId;
+            document.getElementById('providerNameDisplay').textContent = providerName;
+            document.getElementById('reauthForm').reset();
+            document.getElementById('reauthModal').classList.add('active');
         }
         
         function closeModal(modalId) {
@@ -536,6 +580,30 @@
                     location.reload();
                 } else {
                     alert('Error: ' + (result.detail || 'Failed to add provider'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function submitReauth(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            
+            try {
+                const response = await fetch(`/api/providers/${currentProviderId}/reauth`, {
+                    method: 'PUT',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Authentication keys updated successfully! Provider is ready to sync.');
+                    location.reload();
+                } else {
+                    alert('Error: ' + (result.detail || 'Failed to update authentication keys'));
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
