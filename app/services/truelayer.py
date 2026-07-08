@@ -46,8 +46,16 @@ class TrueLayerService:
     
     def get_valid_token(self, db: Session, provider: Provider) -> str:
         """
-        Get a valid access token, refreshing if necessary
+        Get a valid access token, refreshing if necessary.
+        Skip refresh if token was recently updated (within last 5 minutes).
         """
+        # Don't refresh if token was recently re-authenticated (within 5 minutes)
+        if provider.updated_at:
+            time_since_update = datetime.utcnow() - provider.updated_at
+            if time_since_update < timedelta(minutes=5):
+                # Token was recently updated, use it as-is
+                return provider.access_token
+        
         # Check if token needs refresh (refresh 5 minutes before expiry)
         needs_refresh = True
         if provider.token_expires_at:
