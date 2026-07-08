@@ -11,7 +11,7 @@ import logging
 import json
 import requests
 
-from app.database import get_db, init_db
+from app.database import get_db, init_db, SessionLocal
 from app.models import Provider, SyncState, SyncLog, Settings
 from app.services.truelayer import TrueLayerService
 from app.services.firefly import FireflyService
@@ -162,6 +162,35 @@ def startup_event():
     logger.info("Initializing database...")
     init_db()
     
+    # Load persisted settings from the database into the live service objects.
+    # Without this, truelayer_service/firefly_service silently reset to blank
+    # defaults on every restart, even though the DB and UI still show saved values.
+    db = SessionLocal()
+    try:
+        tl_client_id = get_setting(db, "truelayer_client_id")
+        tl_client_secret = get_setting(db, "truelayer_client_secret")
+        if tl_client_id:
+            truelayer_service.client_id = tl_client_id
+        if tl_client_secret:
+            truelayer_service.client_secret = tl_client_secret
+
+        firefly_url = get_setting(db, "firefly_url")
+        firefly_token = get_setting(db, "firefly_token")
+        if firefly_url:
+            firefly_service.base_url = firefly_url.rstrip('/')
+        if firefly_token:
+            firefly_service.token = firefly_token
+            firefly_service.headers = {
+                "Authorization": f"Bearer {firefly_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        logger.info("Loaded persisted TrueLayer/Firefly settings into live services")
+    except Exception as e:
+        logger.error(f"Failed to load persisted settings at startup: {e}")
+    finally:
+        db.close()
+    
     # Start background scheduler
     if not scheduler.running:
         scheduler.add_job(
@@ -290,22 +319,33 @@ async def toggle_provider(provider_id: int, db: Session = Depends(get_db)):
 @app.put("/api/providers/{provider_id}/reauth")
 async def reauthenticate_provider(
     provider_id: int,
-    access_token: str = Form(...),
+    refresh_token: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    """Re-insert authentication key for a provider"""
+    """Re-insert a fresh refresh token for a provider, and use it immediately
+    to obtain a matching access token so the stored pair is always consistent."""
     provider = db.query(Provider).filter(Provider.id == provider_id).first()
     if not provider:
         raise HTTPException(404, "Provider not found")
-    
+
+    try:
+        access_token, new_refresh_token, expires_at = truelayer_service.refresh_access_token(
+            refresh_token
+        )
+    except Exception as e:
+        logger.error(f"Re-authentication failed for {provider.name}: {e}")
+        raise HTTPException(400, f"Could not validate refresh token: {e}")
+
     provider.access_token = access_token
+    provider.refresh_token = new_refresh_token
+    provider.token_expires_at = expires_at
     provider.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(provider)
-    
+
     logger.info(f"Re-authenticated provider: {provider.name}")
-    
-    return {"status": "success", "message": "Authentication key updated successfully"}
+
+    return {"status": "success", "message": "Provider re-authenticated successfully"}
 
 
 # ============================================================================
