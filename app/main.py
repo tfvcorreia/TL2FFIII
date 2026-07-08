@@ -287,6 +287,27 @@ async def toggle_provider(provider_id: int, db: Session = Depends(get_db)):
     return {"status": "success", "enabled": provider.enabled}
 
 
+@app.put("/api/providers/{provider_id}/reauth")
+async def reauthenticate_provider(
+    provider_id: int,
+    access_token: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Re-insert authentication key for a provider"""
+    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    if not provider:
+        raise HTTPException(404, "Provider not found")
+    
+    provider.access_token = access_token
+    provider.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(provider)
+    
+    logger.info(f"Re-authenticated provider: {provider.name}")
+    
+    return {"status": "success", "message": "Authentication key updated successfully"}
+
+
 # ============================================================================
 # API ROUTES - SYNC
 # ============================================================================
