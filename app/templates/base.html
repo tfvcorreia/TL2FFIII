@@ -520,20 +520,24 @@
     <div id="reauthModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Re-insert Authentication Key</h2>
+                <h2>Re-insert Authentication Keys</h2>
                 <button class="close-btn" onclick="closeModal('reauthModal')">&times;</button>
             </div>
             <form id="reauthForm" onsubmit="submitReauth(event)">
                 <p style="margin-bottom: 20px; color: #6c757d;">
-                    Update access token for <strong id="providerNameDisplay"></strong>. 
-                    Get a fresh token from <a href="https://console.truelayer.com/" target="_blank" style="color: #667eea;">TrueLayer Console</a>.
+                    Update authentication keys for <strong id="providerNameDisplay"></strong>. 
+                    Get fresh tokens from <a href="https://console.truelayer.com/" target="_blank" style="color: #667eea;">TrueLayer Console</a>.
                 </p>
                 <div class="form-group">
                     <label>Access Token *</label>
                     <textarea name="access_token" required placeholder="Paste your new access token here"></textarea>
                 </div>
+                <div class="form-group">
+                    <label>Refresh Token *</label>
+                    <textarea name="refresh_token" required placeholder="Paste your new refresh token here"></textarea>
+                </div>
                 <div class="actions">
-                    <button type="submit" class="btn btn-primary">Update Key</button>
+                    <button type="submit" class="btn btn-primary">Update Keys</button>
                     <button type="button" class="btn btn-secondary" onclick="closeModal('reauthModal')">Cancel</button>
                 </div>
             </form>
@@ -596,10 +600,10 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    alert('Authentication key updated successfully! Provider is ready to sync.');
+                    alert('Authentication keys updated successfully! Provider is ready to sync.');
                     location.reload();
                 } else {
-                    alert('Error: ' + (result.detail || 'Failed to update authentication key'));
+                    alert('Error: ' + (result.detail || 'Failed to update authentication keys'));
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
