@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 from app.config import settings
 from app.models import Provider, SyncState
 from sqlalchemy.orm import Session
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TrueLayerService:
@@ -54,6 +57,7 @@ class TrueLayerService:
             time_since_update = datetime.utcnow() - provider.updated_at
             if time_since_update < timedelta(minutes=5):
                 # Token was recently updated, use it as-is
+                logger.info(f"Using recently updated token for {provider.name} (updated {time_since_update.total_seconds():.0f}s ago)")
                 return provider.access_token
         
         # Check if token needs refresh (refresh 5 minutes before expiry)
@@ -62,6 +66,7 @@ class TrueLayerService:
             needs_refresh = provider.token_expires_at <= datetime.utcnow() + timedelta(minutes=5)
         
         if needs_refresh:
+            logger.info(f"Refreshing token for {provider.name}")
             access_token, refresh_token, expires_at = self.refresh_access_token(
                 provider.refresh_token
             )
@@ -84,12 +89,22 @@ class TrueLayerService:
         endpoint = "accounts" if provider_type == "accounts" else "cards"
         
         headers = {"Authorization": f"Bearer {access_token}"}
-        response = requests.get(f"{self.api_base}/{endpoint}", headers=headers)
+        url = f"{self.api_base}/{endpoint}"
+        
+        logger.info(f"Fetching {endpoint} from {url}")
+        response = requests.get(url, headers=headers)
         
         if response.status_code != 200:
-            raise Exception(f"Failed to fetch {endpoint}: {response.text}")
+            error_detail = response.text
+            try:
+                error_detail = response.json()
+            except:
+                pass
+            logger.error(f"Failed to fetch {endpoint}: HTTP {response.status_code} - {error_detail}")
+            raise Exception(f"Failed to fetch {endpoint}: HTTP {response.status_code} - {error_detail}")
         
         data = response.json()
+        logger.info(f"Successfully fetched {len(data.get('results', []))} {endpoint}")
         return data.get("results", [])
     
     def get_transactions(
@@ -110,12 +125,20 @@ class TrueLayerService:
             url += f"?from={from_timestamp}"
         
         headers = {"Authorization": f"Bearer {access_token}"}
+        logger.info(f"Fetching transactions from {url}")
         response = requests.get(url, headers=headers)
         
         if response.status_code != 200:
-            raise Exception(f"Failed to fetch transactions: {response.text}")
+            error_detail = response.text
+            try:
+                error_detail = response.json()
+            except:
+                pass
+            logger.error(f"Failed to fetch transactions for {account_id}: HTTP {response.status_code} - {error_detail}")
+            raise Exception(f"Failed to fetch transactions for {account_id}: HTTP {response.status_code} - {error_detail}")
         
         data = response.json()
+        logger.info(f"Successfully fetched {len(data.get('results', []))} transactions for {account_id}")
         return data.get("results", [])
     
     def sync_provider(
@@ -137,6 +160,7 @@ class TrueLayerService:
         try:
             # Get valid access token
             access_token = self.get_valid_token(db, provider)
+            logger.info(f"Starting sync for provider: {provider.name} (type: {provider.provider_type})")
             
             # Fetch all accounts
             accounts = self.get_accounts(access_token, provider.provider_type)
@@ -184,8 +208,10 @@ class TrueLayerService:
                 })
             
             db.commit()
+            logger.info(f"Sync completed for {provider.name}: {summary['accounts_processed']} accounts, {summary['transactions_synced']} transactions")
             return summary
             
         except Exception as e:
+            logger.error(f"Error syncing {provider.name}: {str(e)}")
             db.rollback()
             raise e
