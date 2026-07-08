@@ -140,6 +140,8 @@ class FireflyClient:
                 if 'duplicate' in str(error_data).lower():
                     logger.debug(f"Duplicate transaction skipped: {description}")
                     return None
+                else:
+                    logger.error(f"Non-duplicate 422 creating transaction '{description}': {error_data}")
             
             response.raise_for_status()
             
@@ -151,8 +153,16 @@ class FireflyClient:
         except requests.exceptions.RequestException as e:
             # Don't raise on duplicates
             if hasattr(e, 'response') and e.response.status_code == 422:
-                logger.debug(f"Duplicate transaction: {description}")
-                return None
+                try:
+                    error_body = e.response.json()
+                except Exception:
+                    error_body = e.response.text
+                if 'duplicate' in str(error_body).lower():
+                    logger.debug(f"Duplicate transaction: {description}")
+                    return None
+                else:
+                    logger.error(f"Non-duplicate 422 creating transaction '{description}': {error_body}")
+                    return None
             
             logger.error(f"Error creating transaction: {e}")
             raise
