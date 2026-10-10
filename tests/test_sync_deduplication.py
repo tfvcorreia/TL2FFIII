@@ -26,6 +26,11 @@ class SyncDeduplicationTests(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
+    def test_main_module_imports_for_application_startup(self):
+        from app.main import sync_provider_to_firefly
+
+        self.assertTrue(callable(sync_provider_to_firefly))
+
     def test_same_true_layer_id_is_imported_only_once(self):
         service = FireflyService()
         service.get_or_create_account = Mock(return_value="42")
