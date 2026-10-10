@@ -1,5 +1,5 @@
 import requests
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from app.config import settings
 from app.models import Provider, SyncState
@@ -144,7 +144,8 @@ class TrueLayerService:
     def sync_provider(
         self, 
         db: Session, 
-        provider: Provider
+        provider: Provider,
+        sync_transactions: Callable[[str, str, List[Dict]], Dict],
     ) -> Dict:
         """
         Sync all accounts for a provider
@@ -191,20 +192,33 @@ class TrueLayerService:
                     sync_state.last_sync_timestamp
                 )
                 
+                imported_count = 0
                 if transactions:
+                    firefly_result = sync_transactions(
+                        account_id, account_name, transactions
+                    )
+                    if firefly_result.get("errors", 0):
+                        raise RuntimeError(
+                            f"Firefly rejected {firefly_result['errors']} transaction(s) "
+                            f"for account {account_name}."
+                        )
+
+                    imported_count = firefly_result.get("created", 0)
                     # Update sync state with newest timestamp
                     newest_timestamp = max(tx["timestamp"] for tx in transactions)
                     sync_state.last_sync_timestamp = newest_timestamp
                     sync_state.last_sync_at = datetime.utcnow()
-                    sync_state.transaction_count += len(transactions)
+                    sync_state.transaction_count += imported_count
+                    sync_state.last_sync_details = firefly_result
                     
-                    summary["transactions_synced"] += len(transactions)
+                    summary["transactions_synced"] += imported_count
                 
                 summary["accounts_processed"] += 1
                 summary["accounts"].append({
                     "id": account_id,
                     "name": account_name,
-                    "transactions": len(transactions)
+                    "transactions": imported_count,
+                    "duplicates": firefly_result.get("duplicates", 0) if transactions else 0,
                 })
             
             db.commit()

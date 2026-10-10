@@ -68,6 +68,20 @@ def set_setting(db: Session, key: str, value):
 # BACKGROUND SYNC FUNCTION
 # ============================================================================
 
+def sync_provider_to_firefly(db: Session, provider: Provider) -> Dict:
+    """Fetch each account once and import that same batch to Firefly III."""
+    def import_account(account_id: str, account_name: str, transactions: List[Dict]) -> Dict:
+        return firefly_service.sync_truelayer_transactions(
+            transactions,
+            account_name,
+            provider.name,
+            account_id,
+            db,
+        )
+
+    return truelayer_service.sync_provider(db, provider, import_account)
+
+
 def scheduled_sync():
     """Background job to sync all enabled providers"""
     logger.info("Starting scheduled sync...")
@@ -80,51 +94,12 @@ def scheduled_sync():
             try:
                 logger.info(f"Syncing provider: {provider.name}")
                 
-                # Sync TrueLayer transactions
-                sync_result = truelayer_service.sync_provider(db, provider)
-                
-                # Get transactions and sync to Firefly
-                access_token = truelayer_service.get_valid_token(db, provider)
-                
-                for account_info in sync_result["accounts"]:
-                    if account_info["transactions"] == 0:
-                        continue
-                    
-                    # Fetch transactions for this account
-                    sync_state = db.query(SyncState).filter(
-                        SyncState.account_id == account_info["id"]
-                    ).first()
-                    
-                    if not sync_state:
-                        continue
-                    
-                    # Determine from_timestamp for incremental sync
-                    from_ts = None
-                    if sync_state.last_sync_details:
-                        from_ts = sync_state.last_sync_details.get("last_firefly_sync")
-                    
-                    transactions = truelayer_service.get_transactions(
-                        access_token,
-                        account_info["id"],
-                        provider.provider_type,
-                        from_ts
-                    )
-                    
-                    if transactions:
-                        # Sync to Firefly III
-                        firefly_result = firefly_service.sync_truelayer_transactions(
-                            transactions,
-                            account_info["name"]
-                        )
-                        
-                        # Update sync state
-                        sync_state.last_sync_details = {
-                            "last_firefly_sync": datetime.utcnow().isoformat(),
-                            "firefly_result": firefly_result
-                        }
-                        db.commit()
-                        
-                        logger.info(f"Synced {firefly_result['created']} new transactions for {account_info['name']}")
+                sync_result = sync_provider_to_firefly(db, provider)
+                logger.info(
+                    "Synced %s new transactions for provider %s",
+                    sync_result["transactions_synced"],
+                    provider.name,
+                )
                 
                 # Log successful sync
                 log = SyncLog(
@@ -371,7 +346,7 @@ async def sync_provider(provider_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Provider not found")
     
     try:
-        result = truelayer_service.sync_provider(db, provider)
+        result = sync_provider_to_firefly(db, provider)
         
         log = SyncLog(
             provider_name=provider.name,

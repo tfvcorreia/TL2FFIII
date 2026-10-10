@@ -1,7 +1,15 @@
+import json
+import logging
 import requests
 from typing import Dict, List, Optional
 from datetime import datetime
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from app.config import settings
+from app.models import ImportedTransaction
+
+
+logger = logging.getLogger(__name__)
 
 
 class FireflyService:
@@ -129,18 +137,33 @@ class FireflyService:
         response = requests.post(
             f"{self.base_url}/api/v1/transactions",
             headers=self.headers,
-            json=payload
+            json=payload,
+            timeout=30,
         )
         
-        # 422 might mean duplicate - that's okay
         if response.status_code in [200, 201]:
             return {"status": "created", "data": response.json()}
-        elif response.status_code == 422:
-            return {"status": "duplicate", "data": response.json()}
-        else:
-            return {"status": "error", "message": response.text}
-    
-    def import_transactions(self, transactions: List[Dict]) -> Dict:
+        if response.status_code == 422:
+            try:
+                error_data = response.json()
+            except ValueError:
+                error_data = {}
+            if "duplicate" in json.dumps(error_data).lower():
+                return {"status": "duplicate", "data": error_data}
+
+        return {
+            "status": "error",
+            "status_code": response.status_code,
+            "message": response.text,
+        }
+
+    def import_transactions(
+        self,
+        transactions: List[Dict],
+        provider_name: str,
+        source_account_id: str,
+        db: Session,
+    ) -> Dict:
         """
         Import multiple transactions to Firefly III
         Returns summary of import operation
@@ -150,14 +173,52 @@ class FireflyService:
             "created": 0,
             "duplicates": 0,
             "errors": 0,
+            "untracked": 0,
             "error_details": []
         }
-        
+
         for tx in transactions:
+            external_id = tx.get("external_id")
+            imported = None
+            if external_id:
+                imported = ImportedTransaction(
+                    provider_name=provider_name,
+                    account_id=source_account_id,
+                    external_id=str(external_id),
+                    status="processing",
+                )
+                db.add(imported)
+                try:
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    existing = db.query(ImportedTransaction).filter_by(
+                        provider_name=provider_name,
+                        account_id=source_account_id,
+                        external_id=str(external_id),
+                    ).first()
+                    if existing and existing.status == "imported":
+                        summary["duplicates"] += 1
+                        continue
+                    # shortcut: ambiguous API outcomes require manual reconciliation until Firefly can look up external IDs reliably.
+                    raise RuntimeError(
+                        f"Import for provider {provider_name}, account {source_account_id}, "
+                        f"transaction {external_id} is unresolved; it was not sent to Firefly again."
+                    )
+            else:
+                logger.warning(
+                    "TrueLayer transaction for provider %s and account %s has no stable ID; "
+                    "persistent duplicate prevention is unavailable.",
+                    provider_name,
+                    source_account_id,
+                )
+
             result = self.import_transaction(tx)
-            
+
             if result["status"] == "created":
                 summary["created"] += 1
+                if not imported:
+                    summary["untracked"] += 1
             elif result["status"] == "duplicate":
                 summary["duplicates"] += 1
             else:
@@ -166,13 +227,24 @@ class FireflyService:
                     "transaction": tx,
                     "error": result.get("message")
                 })
+                if imported and result.get("status_code", 500) < 500:
+                    db.delete(imported)
+                    db.commit()
+                continue
+
+            if imported:
+                imported.status = "imported"
+                db.commit()
         
         return summary
     
     def sync_truelayer_transactions(
         self, 
         truelayer_transactions: List[Dict],
-        firefly_account_name: str
+        firefly_account_name: str,
+        provider_name: str,
+        source_account_id: str,
+        db: Session,
     ) -> Dict:
         """
         Sync TrueLayer transactions to Firefly III
@@ -187,4 +259,9 @@ class FireflyService:
         ]
         
         # Import to Firefly
-        return self.import_transactions(firefly_transactions)
+        return self.import_transactions(
+            firefly_transactions,
+            provider_name,
+            source_account_id,
+            db,
+        )

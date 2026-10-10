@@ -111,8 +111,9 @@ Use the Web UI to add each of your bank connections:
 
 The app runs automatic syncs in the background based on `SYNC_INTERVAL_MINUTES` (default: 60 minutes).
 
-- Incremental syncs only fetch new transactions
-- Duplicate prevention using transaction IDs
+- Incremental syncs import one fetched batch per account and advance the cursor only after Firefly accepts it
+- Persistent duplicate prevention uses the TrueLayer transaction ID, scoped to provider and account
+- Transactions without a stable TrueLayer ID cannot be persistently deduplicated
 - Failed syncs are logged and don't stop future syncs
 
 ### Adding Your Partner's Accounts
@@ -198,8 +199,8 @@ volumes:
 4. **Fetch Transactions:** Incremental fetch from last sync point
 5. **Transform:** Convert TrueLayer format to Firefly III format
 6. **Import:** Direct API call to Firefly III
-7. **Deduplication:** Firefly III prevents duplicates via external_id
-8. **Update State:** Store last sync timestamp per account
+7. **Deduplication:** The integration records successfully handled TrueLayer IDs in its database; Firefly's duplicate-hash check remains a fallback
+8. **Update State:** Advance the per-account timestamp only after the Firefly import succeeds
 
 ## Troubleshooting
 
@@ -224,9 +225,10 @@ volumes:
 - Look at container logs: `docker logs truelayer-firefly`
 
 **Duplicates in Firefly:**
-- Should not happen (external_id prevents this)
-- Check if transaction_id is present in TrueLayer data
-- Report as a bug if duplicates occur
+- New imports are deduplicated by provider, account, and TrueLayer transaction ID
+- Transactions without a stable TrueLayer ID rely on Firefly's duplicate-hash check
+- Existing duplicates are not removed automatically
+- An interrupted import may be reported as unresolved and is not retried automatically, to avoid creating another duplicate; reconcile its transaction ID in Firefly before clearing the import record
 
 ### Performance
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Text, UniqueConstraint
 from datetime import datetime
 from app.database import Base
 
@@ -37,6 +37,24 @@ class SyncState(Base):
     
     # Store last successful sync details
     last_sync_details = Column(JSON, default={})
+
+
+class ImportedTransaction(Base):
+    """Records TrueLayer transactions successfully handled by Firefly."""
+    __tablename__ = "imported_transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_name", "account_id", "external_id",
+            name="uq_imported_transaction_source",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_name = Column(String, nullable=False)
+    account_id = Column(String, nullable=False)
+    external_id = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="processing")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class SyncLog(Base):
