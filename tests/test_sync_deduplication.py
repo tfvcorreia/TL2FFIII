@@ -115,12 +115,42 @@ class SyncDeduplicationTests(unittest.TestCase):
         }
 
         with patch("app.services.firefly.requests.post") as post:
-            with self.assertRaisesRegex(RuntimeError, "unresolved"):
-                service.sync_truelayer_transactions(
-                    [transaction], "Current Account", "Bank", "account-1", self.db
-                )
+            result = service.sync_truelayer_transactions(
+                [transaction], "Current Account", "Bank", "account-1", self.db
+            )
 
+        self.assertEqual(result["errors"], 1)
         post.assert_not_called()
+
+    def test_unresolved_import_does_not_block_later_transactions(self):
+        self.db.add(ImportedTransaction(
+            provider_name="Bank",
+            account_id="account-1",
+            external_id="uncertain-tx",
+            status="processing",
+        ))
+        self.db.commit()
+        service = FireflyService()
+        service.get_or_create_account = Mock(return_value="42")
+        response = Mock(status_code=201)
+        response.json.return_value = {"data": {"id": "99"}}
+        transactions = [
+            {"transaction_id": "uncertain-tx", "timestamp": "2026-07-01T10:00:00Z"},
+            {"transaction_id": "later-tx", "timestamp": "2026-07-02T10:00:00Z"},
+        ]
+
+        with patch("app.services.firefly.requests.post", return_value=response) as post:
+            result = service.sync_truelayer_transactions(
+                transactions, "Current Account", "Bank", "account-1", self.db
+            )
+
+        self.assertEqual(result["errors"], 1)
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(post.call_count, 1)
+        later_import = self.db.query(ImportedTransaction).filter_by(
+            external_id="later-tx"
+        ).one()
+        self.assertEqual(later_import.status, "imported")
 
     def test_sync_advances_cursor_only_after_firefly_import_succeeds(self):
         provider = Provider(
@@ -160,7 +190,7 @@ class SyncDeduplicationTests(unittest.TestCase):
         self.assertEqual(state.transaction_count, 1)
         self.assertEqual(result["transactions_synced"], 1)
 
-    def test_sync_does_not_advance_cursor_when_firefly_import_fails(self):
+    def test_sync_does_not_advance_cursor_when_import_reports_errors(self):
         provider = Provider(
             name="Bank",
             provider_type="accounts",
@@ -182,11 +212,11 @@ class SyncDeduplicationTests(unittest.TestCase):
                 return_value=[{"transaction_id": "tx", "timestamp": "2026-07-02T10:00:00Z"}],
             ),
         ):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaisesRegex(RuntimeError, "rejected 1 transaction"):
                 service.sync_provider(
                     self.db,
                     provider,
-                    lambda *_args: (_ for _ in ()).throw(RuntimeError("Firefly unavailable")),
+                    lambda *_args: {"errors": 1},
                 )
 
         self.assertEqual(self.db.query(SyncState).count(), 0)

@@ -201,10 +201,17 @@ class FireflyService:
                         summary["duplicates"] += 1
                         continue
                     # shortcut: ambiguous API outcomes require manual reconciliation until Firefly can look up external IDs reliably.
-                    raise RuntimeError(
+                    error_message = (
                         f"Import for provider {provider_name}, account {source_account_id}, "
                         f"transaction {external_id} is unresolved; it was not sent to Firefly again."
                     )
+                    logger.error(error_message)
+                    summary["errors"] += 1
+                    summary["error_details"].append({
+                        "transaction": tx,
+                        "error": error_message,
+                    })
+                    continue
             else:
                 logger.warning(
                     "TrueLayer transaction for provider %s and account %s has no stable ID; "
