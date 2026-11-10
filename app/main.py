@@ -12,7 +12,7 @@ import json
 import requests
 
 from app.database import get_db, init_db, SessionLocal
-from app.models import Provider, SyncState, SyncLog, Settings
+from app.models import ImportedTransaction, Provider, SyncState, SyncLog, Settings
 from app.services.truelayer import TrueLayerService
 from app.services.firefly import FireflyService
 from app.config import settings
@@ -289,6 +289,51 @@ async def toggle_provider(provider_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return {"status": "success", "enabled": provider.enabled}
+
+
+@app.get("/api/imported-transactions/unresolved")
+def list_unresolved_transactions(db: Session = Depends(get_db)):
+    """List imports requiring manual reconciliation."""
+    records = db.query(ImportedTransaction).filter_by(status="processing").order_by(
+        ImportedTransaction.created_at
+    ).all()
+    return [
+        {
+            "id": record.id,
+            "provider_name": record.provider_name,
+            "account_id": record.account_id,
+            "external_id": record.external_id,
+            "created_at": record.created_at.isoformat() if record.created_at else None,
+        }
+        for record in records
+    ]
+
+
+def get_unresolved_transaction(import_id: int, db: Session) -> ImportedTransaction:
+    record = db.query(ImportedTransaction).filter_by(id=import_id).first()
+    if not record:
+        raise HTTPException(404, "Unresolved import not found")
+    if record.status != "processing":
+        raise HTTPException(409, "Import is no longer unresolved")
+    return record
+
+
+@app.post("/api/imported-transactions/{import_id}/mark-imported")
+def mark_imported_transaction(import_id: int, db: Session = Depends(get_db)):
+    """Record that an unresolved transaction was verified in Firefly III."""
+    record = get_unresolved_transaction(import_id, db)
+    record.status = "imported"
+    db.commit()
+    return {"status": "imported", "id": import_id}
+
+
+@app.delete("/api/imported-transactions/{import_id}")
+def release_unresolved_transaction(import_id: int, db: Session = Depends(get_db)):
+    """Allow a later sync to retry an unresolved transaction."""
+    record = get_unresolved_transaction(import_id, db)
+    db.delete(record)
+    db.commit()
+    return {"status": "retry_allowed", "id": import_id}
 
 
 @app.put("/api/providers/{provider_id}/reauth")

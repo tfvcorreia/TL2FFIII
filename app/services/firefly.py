@@ -173,6 +173,7 @@ class FireflyService:
             "created": 0,
             "duplicates": 0,
             "errors": 0,
+            "unresolved": 0,
             "untracked": 0,
             "error_details": []
         }
@@ -207,6 +208,7 @@ class FireflyService:
                     )
                     logger.error(error_message)
                     summary["errors"] += 1
+                    summary["unresolved"] += 1
                     summary["error_details"].append({
                         "transaction": tx,
                         "error": error_message,

@@ -198,10 +198,21 @@ class TrueLayerService:
                         account_id, account_name, transactions
                     )
                     if firefly_result.get("errors", 0):
-                        raise RuntimeError(
-                            f"Firefly rejected {firefly_result['errors']} transaction(s) "
-                            f"for account {account_name}."
-                        )
+                        unresolved = firefly_result.get("unresolved", 0)
+                        rejected = firefly_result["errors"] - unresolved
+                        if unresolved and not rejected:
+                            message = f"{unresolved} unresolved import(s) for account {account_name}."
+                        elif unresolved:
+                            message = (
+                                f"Firefly rejected {rejected} transaction(s) and found "
+                                f"{unresolved} unresolved import(s) for account {account_name}."
+                            )
+                        else:
+                            message = (
+                                f"Firefly rejected {firefly_result['errors']} transaction(s) "
+                                f"for account {account_name}."
+                            )
+                        raise RuntimeError(message)
 
                     imported_count = firefly_result.get("created", 0)
                     # Update sync state with newest timestamp

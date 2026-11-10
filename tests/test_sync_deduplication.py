@@ -120,7 +120,93 @@ class SyncDeduplicationTests(unittest.TestCase):
             )
 
         self.assertEqual(result["errors"], 1)
+        self.assertEqual(result["unresolved"], 1)
         post.assert_not_called()
+
+    def test_unresolved_import_list_contains_only_pending_records(self):
+        from app.main import list_unresolved_transactions
+
+        self.db.add_all([
+            ImportedTransaction(
+                provider_name="Bank",
+                account_id="account-1",
+                external_id="pending-tx",
+                status="processing",
+            ),
+            ImportedTransaction(
+                provider_name="Bank",
+                account_id="account-1",
+                external_id="done-tx",
+                status="imported",
+            ),
+        ])
+        self.db.commit()
+
+        result = list_unresolved_transactions(self.db)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["external_id"], "pending-tx")
+
+    def test_marking_unresolved_import_as_imported_preserves_deduplication(self):
+        from app.main import mark_imported_transaction
+
+        imported = ImportedTransaction(
+            provider_name="Bank",
+            account_id="account-1",
+            external_id="uncertain-tx",
+            status="processing",
+        )
+        self.db.add(imported)
+        self.db.commit()
+
+        result = mark_imported_transaction(imported.id, self.db)
+        self.assertEqual(result["status"], "imported")
+
+        service = FireflyService()
+        service.get_or_create_account = Mock(return_value="42")
+        with patch("app.services.firefly.requests.post") as post:
+            summary = service.sync_truelayer_transactions(
+                [{"transaction_id": "uncertain-tx"}],
+                "Current Account",
+                "Bank",
+                "account-1",
+                self.db,
+            )
+
+        self.assertEqual(summary["duplicates"], 1)
+        post.assert_not_called()
+
+    def test_releasing_unresolved_import_allows_next_sync_to_retry(self):
+        from app.main import release_unresolved_transaction
+
+        imported = ImportedTransaction(
+            provider_name="Bank",
+            account_id="account-1",
+            external_id="uncertain-tx",
+            status="processing",
+        )
+        self.db.add(imported)
+        self.db.commit()
+
+        result = release_unresolved_transaction(imported.id, self.db)
+        self.assertEqual(result["status"], "retry_allowed")
+        self.assertEqual(self.db.query(ImportedTransaction).count(), 0)
+
+        service = FireflyService()
+        service.get_or_create_account = Mock(return_value="42")
+        response = Mock(status_code=201)
+        response.json.return_value = {"data": {"id": "99"}}
+        with patch("app.services.firefly.requests.post", return_value=response) as post:
+            summary = service.sync_truelayer_transactions(
+                [{"transaction_id": "uncertain-tx"}],
+                "Current Account",
+                "Bank",
+                "account-1",
+                self.db,
+            )
+
+        self.assertEqual(summary["created"], 1)
+        post.assert_called_once()
 
     def test_unresolved_import_does_not_block_later_transactions(self):
         self.db.add(ImportedTransaction(
@@ -212,11 +298,11 @@ class SyncDeduplicationTests(unittest.TestCase):
                 return_value=[{"transaction_id": "tx", "timestamp": "2026-07-02T10:00:00Z"}],
             ),
         ):
-            with self.assertRaisesRegex(RuntimeError, "rejected 1 transaction"):
+            with self.assertRaisesRegex(RuntimeError, "1 unresolved import"):
                 service.sync_provider(
                     self.db,
                     provider,
-                    lambda *_args: {"errors": 1},
+                    lambda *_args: {"errors": 1, "unresolved": 1},
                 )
 
         self.assertEqual(self.db.query(SyncState).count(), 0)

@@ -228,7 +228,7 @@ volumes:
 - New imports are deduplicated by provider, account, and TrueLayer transaction ID
 - Transactions without a stable TrueLayer ID rely on Firefly's duplicate-hash check
 - Existing duplicates are not removed automatically
-- An interrupted import may be reported as unresolved and is not retried automatically, to avoid creating another duplicate; reconcile its transaction ID in Firefly before clearing the import record
+- An interrupted import may be reported as unresolved and is not retried automatically, to avoid creating another duplicate. Use the dashboard's Unresolved Imports section to mark it already imported only after confirming it exists in Firefly, or allow a retry only after confirming it is absent
 
 ### Performance
 

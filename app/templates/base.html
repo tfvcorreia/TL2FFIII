@@ -281,6 +281,30 @@
             margin-top: 20px;
             flex-wrap: wrap;
         }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        .unresolved-id {
+            overflow-wrap: anywhere;
+            font-family: monospace;
+        }
+
+        .reconcile-actions {
+            display: flex;
+            gap: 8px;
+            min-width: 230px;
+        }
+
+        .btn-small {
+            padding: 7px 10px;
+            font-size: 13px;
+        }
         
         .empty-state {
             text-align: center;
@@ -362,6 +386,28 @@
                     🔄 Sync All Now
                 </button>
             </div>
+        </div>
+
+        <div class="section" id="unresolvedImportsSection" hidden>
+            <h2>Unresolved Imports (<span id="unresolvedImportCount">0</span>)</h2>
+            <p class="alert alert-warning">
+                Check each transaction in Firefly III before choosing an action. Mark it imported only if it exists there; allow retry only if it does not.
+            </p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Provider</th>
+                            <th>TrueLayer Account ID</th>
+                            <th>Transaction ID</th>
+                            <th>Recorded</th>
+                            <th>Resolution</th>
+                        </tr>
+                    </thead>
+                    <tbody id="unresolvedImportsBody"></tbody>
+                </table>
+            </div>
+            <p id="unresolvedImportsError" class="alert alert-error" role="alert" hidden></p>
         </div>
         
         <!-- Providers -->
@@ -547,6 +593,76 @@
     <script>
         let currentProviderId = null;
 
+        async function loadUnresolvedImports() {
+            const section = document.getElementById('unresolvedImportsSection');
+            const body = document.getElementById('unresolvedImportsBody');
+            const error = document.getElementById('unresolvedImportsError');
+
+            try {
+                const response = await fetch('/api/imported-transactions/unresolved');
+                const records = await response.json();
+                if (!response.ok) throw new Error(records.detail || 'Could not load unresolved imports');
+
+                body.replaceChildren();
+                document.getElementById('unresolvedImportCount').textContent = records.length;
+                section.hidden = records.length === 0;
+                error.hidden = true;
+
+                for (const record of records) {
+                    const row = document.createElement('tr');
+                    for (const value of [record.provider_name, record.account_id, record.external_id, record.created_at || 'Unknown']) {
+                        const cell = document.createElement('td');
+                        cell.textContent = value;
+                        row.appendChild(cell);
+                    }
+                    row.children[2].classList.add('unresolved-id');
+
+                    const actionsCell = document.createElement('td');
+                    const actions = document.createElement('div');
+                    actions.className = 'reconcile-actions';
+                    const importedButton = document.createElement('button');
+                    importedButton.className = 'btn btn-success btn-small';
+                    importedButton.textContent = 'Already in Firefly';
+                    importedButton.addEventListener('click', () => resolveUnresolvedImport(record.id, 'imported'));
+                    const retryButton = document.createElement('button');
+                    retryButton.className = 'btn btn-warning btn-small';
+                    retryButton.textContent = 'Allow retry';
+                    retryButton.addEventListener('click', () => resolveUnresolvedImport(record.id, 'retry'));
+                    actions.append(importedButton, retryButton);
+                    actionsCell.appendChild(actions);
+                    row.appendChild(actionsCell);
+                    body.appendChild(row);
+                }
+            } catch (loadError) {
+                section.hidden = false;
+                error.textContent = loadError.message;
+                error.hidden = false;
+            }
+        }
+
+        async function resolveUnresolvedImport(importId, resolution) {
+            const alreadyImported = resolution === 'imported';
+            const confirmation = alreadyImported
+                ? 'Confirm this transaction is already present in Firefly III. It will not be sent again.'
+                : 'Confirm this transaction is absent from Firefly III. The next sync may send it again.';
+            if (!confirm(confirmation)) return;
+
+            const url = alreadyImported
+                ? `/api/imported-transactions/${importId}/mark-imported`
+                : `/api/imported-transactions/${importId}`;
+            try {
+                const response = await fetch(url, { method: alreadyImported ? 'POST' : 'DELETE' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || 'Could not update unresolved import');
+                await loadUnresolvedImports();
+                alert(alreadyImported
+                    ? 'Recorded as already imported. Run Sync All Now to resume syncing.'
+                    : 'Retry allowed. Run Sync All Now to retry this transaction.');
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
         function openAddProviderModal() {
             document.getElementById('addProviderModal').classList.add('active');
         }
@@ -693,6 +809,8 @@
                 event.target.classList.remove('active');
             }
         }
+
+        loadUnresolvedImports();
     </script>
 </body>
 </html>
