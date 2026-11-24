@@ -301,6 +301,72 @@
             min-width: 230px;
         }
 
+        @media (max-width: 800px) {
+            .unresolved-table,
+            .unresolved-table tbody {
+                display: block;
+                width: 100%;
+            }
+
+            .unresolved-table thead {
+                display: none;
+            }
+
+            .unresolved-table tbody {
+                display: grid;
+                gap: 12px;
+            }
+
+            .unresolved-table tbody tr {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px 12px;
+                padding: 8px;
+                border: 1px solid #e5e7eb;
+                border-radius: 6px;
+            }
+
+            .unresolved-table tbody tr:hover {
+                background: white;
+            }
+
+            .unresolved-table td {
+                min-width: 0;
+                padding: 4px;
+                border: 0;
+                overflow-wrap: anywhere;
+            }
+
+            .unresolved-table td::before {
+                content: attr(data-label);
+                display: block;
+                margin-bottom: 2px;
+                color: #6c757d;
+                font-size: 11px;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+
+            .unresolved-table td[data-field="description"],
+            .unresolved-table td[data-field="transaction_id"],
+            .unresolved-table td[data-field="resolution"] {
+                grid-column: 1 / -1;
+            }
+
+            .unresolved-id {
+                overflow-wrap: anywhere;
+            }
+
+            .reconcile-actions {
+                min-width: 0;
+                flex-wrap: wrap;
+            }
+
+            .reconcile-actions .btn {
+                flex: 1 1 130px;
+            }
+        }
+
         .btn-small {
             padding: 7px 10px;
             font-size: 13px;
@@ -394,7 +460,7 @@
                 Check each transaction in Firefly III before choosing an action. Mark it imported only if it exists there; allow retry only if it does not.
             </p>
             <div class="table-wrap">
-                <table>
+                <table class="unresolved-table">
                     <thead>
                         <tr>
                             <th>Provider</th>
@@ -618,23 +684,29 @@
                     const amount = details.amount == null
                         ? 'Unavailable'
                         : `${details.amount} ${details.currency_code || ''}`.trim();
-                    for (const value of [
-                        record.provider_name,
-                        record.account_id,
-                        details.date || 'Unavailable',
-                        details.description || 'Details unavailable for this older import',
-                        details.type || 'Unknown',
-                        amount,
-                        record.external_id,
-                        record.created_at || 'Unknown',
+                    for (const [label, field, value] of [
+                        ['Provider', 'provider', record.provider_name],
+                        ['TrueLayer Account ID', 'account_id', record.account_id],
+                        ['Transaction Date', 'date', details.date || 'Unavailable'],
+                        ['Description', 'description', details.description || 'Details unavailable for this older import'],
+                        ['Type', 'type', details.type || 'Unknown'],
+                        ['Amount', 'amount', amount],
+                        ['Transaction ID', 'transaction_id', record.external_id],
+                        ['Recorded', 'recorded', record.created_at || 'Unknown'],
                     ]) {
                         const cell = document.createElement('td');
+                        cell.dataset.label = label;
+                        cell.dataset.field = field;
+                        cell.setAttribute('aria-label', label);
                         cell.textContent = value;
                         row.appendChild(cell);
                     }
                     row.children[6].classList.add('unresolved-id');
 
                     const actionsCell = document.createElement('td');
+                    actionsCell.dataset.label = 'Resolution';
+                    actionsCell.dataset.field = 'resolution';
+                    actionsCell.setAttribute('aria-label', 'Resolution');
                     const actions = document.createElement('div');
                     actions.className = 'reconcile-actions';
                     const importedButton = document.createElement('button');
