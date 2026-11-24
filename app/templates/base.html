@@ -295,75 +295,82 @@
             font-family: monospace;
         }
 
+        .unresolved-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .unresolved-record {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 16px;
+            align-items: center;
+            padding: 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+        }
+
+        .unresolved-fields {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px 16px;
+            min-width: 0;
+        }
+
+        .unresolved-field {
+            min-width: 0;
+        }
+
+        .unresolved-field-label {
+            display: block;
+            margin-bottom: 3px;
+            color: #6c757d;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .unresolved-field-value {
+            display: block;
+            overflow-wrap: anywhere;
+        }
+
+        .unresolved-field[data-field="description"],
+        .unresolved-field[data-field="transaction_id"] {
+            grid-column: 1 / -1;
+        }
+
         .reconcile-actions {
             display: flex;
             gap: 8px;
-            min-width: 230px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            max-width: 260px;
         }
 
         @media (max-width: 800px) {
-            .unresolved-table,
-            .unresolved-table tbody {
-                display: block;
-                width: 100%;
-            }
-
-            .unresolved-table thead {
-                display: none;
-            }
-
-            .unresolved-table tbody {
-                display: grid;
+            .unresolved-record {
+                grid-template-columns: minmax(0, 1fr);
                 gap: 12px;
             }
 
-            .unresolved-table tbody tr {
-                display: grid;
+            .unresolved-fields {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 8px 12px;
-                padding: 8px;
-                border: 1px solid #e5e7eb;
-                border-radius: 6px;
-            }
-
-            .unresolved-table tbody tr:hover {
-                background: white;
-            }
-
-            .unresolved-table td {
-                min-width: 0;
-                padding: 4px;
-                border: 0;
-                overflow-wrap: anywhere;
-            }
-
-            .unresolved-table td::before {
-                content: attr(data-label);
-                display: block;
-                margin-bottom: 2px;
-                color: #6c757d;
-                font-size: 11px;
-                font-weight: 600;
-                text-transform: uppercase;
-            }
-
-            .unresolved-table td[data-field="description"],
-            .unresolved-table td[data-field="transaction_id"],
-            .unresolved-table td[data-field="resolution"] {
-                grid-column: 1 / -1;
-            }
-
-            .unresolved-id {
-                overflow-wrap: anywhere;
             }
 
             .reconcile-actions {
-                min-width: 0;
-                flex-wrap: wrap;
+                max-width: none;
+                justify-content: stretch;
             }
 
             .reconcile-actions .btn {
-                flex: 1 1 130px;
+                flex: 1 1 140px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .unresolved-fields {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
 
@@ -459,24 +466,7 @@
             <p class="alert alert-warning">
                 Check each transaction in Firefly III before choosing an action. Mark it imported only if it exists there; allow retry only if it does not.
             </p>
-            <div class="table-wrap">
-                <table class="unresolved-table">
-                    <thead>
-                        <tr>
-                            <th>Provider</th>
-                            <th>TrueLayer Account ID</th>
-                            <th>Transaction Date</th>
-                            <th>Description</th>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Transaction ID</th>
-                            <th>Recorded</th>
-                            <th>Resolution</th>
-                        </tr>
-                    </thead>
-                    <tbody id="unresolvedImportsBody"></tbody>
-                </table>
-            </div>
+            <div id="unresolvedImportsBody" class="unresolved-list"></div>
             <p id="unresolvedImportsError" class="alert alert-error" role="alert" hidden></p>
         </div>
         
@@ -679,11 +669,14 @@
                 error.hidden = true;
 
                 for (const record of records) {
-                    const row = document.createElement('tr');
+                    const row = document.createElement('article');
+                    row.className = 'unresolved-record';
                     const details = record.transaction_details || {};
                     const amount = details.amount == null
                         ? 'Unavailable'
                         : `${details.amount} ${details.currency_code || ''}`.trim();
+                    const fields = document.createElement('div');
+                    fields.className = 'unresolved-fields';
                     for (const [label, field, value] of [
                         ['Provider', 'provider', record.provider_name],
                         ['TrueLayer Account ID', 'account_id', record.account_id],
@@ -694,19 +687,21 @@
                         ['Transaction ID', 'transaction_id', record.external_id],
                         ['Recorded', 'recorded', record.created_at || 'Unknown'],
                     ]) {
-                        const cell = document.createElement('td');
-                        cell.dataset.label = label;
-                        cell.dataset.field = field;
-                        cell.setAttribute('aria-label', label);
-                        cell.textContent = value;
-                        row.appendChild(cell);
+                        const item = document.createElement('div');
+                        item.className = 'unresolved-field';
+                        item.dataset.field = field;
+                        const fieldLabel = document.createElement('span');
+                        fieldLabel.className = 'unresolved-field-label';
+                        fieldLabel.textContent = label;
+                        const fieldValue = document.createElement('span');
+                        fieldValue.className = 'unresolved-field-value';
+                        fieldValue.textContent = value;
+                        if (field === 'transaction_id') fieldValue.classList.add('unresolved-id');
+                        item.append(fieldLabel, fieldValue);
+                        fields.appendChild(item);
                     }
-                    row.children[6].classList.add('unresolved-id');
+                    row.appendChild(fields);
 
-                    const actionsCell = document.createElement('td');
-                    actionsCell.dataset.label = 'Resolution';
-                    actionsCell.dataset.field = 'resolution';
-                    actionsCell.setAttribute('aria-label', 'Resolution');
                     const actions = document.createElement('div');
                     actions.className = 'reconcile-actions';
                     const importedButton = document.createElement('button');
@@ -718,8 +713,7 @@
                     retryButton.textContent = 'Allow retry';
                     retryButton.addEventListener('click', () => resolveUnresolvedImport(record.id, 'retry'));
                     actions.append(importedButton, retryButton);
-                    actionsCell.appendChild(actions);
-                    row.appendChild(actionsCell);
+                    row.appendChild(actions);
                     body.appendChild(row);
                 }
             } catch (loadError) {
