@@ -12,6 +12,18 @@ from app.models import ImportedTransaction
 logger = logging.getLogger(__name__)
 
 
+def reconciliation_details(transaction: Dict) -> Dict:
+    fields = (
+        "date",
+        "description",
+        "amount",
+        "currency_code",
+        "type",
+        "category_name",
+    )
+    return {field: transaction[field] for field in fields if field in transaction}
+
+
 class FireflyService:
     """Handles all Firefly III API interactions"""
     
@@ -187,6 +199,7 @@ class FireflyService:
                     account_id=source_account_id,
                     external_id=str(external_id),
                     status="processing",
+                    transaction_details=reconciliation_details(tx),
                 )
                 db.add(imported)
                 try:
@@ -201,6 +214,9 @@ class FireflyService:
                     if existing and existing.status == "imported":
                         summary["duplicates"] += 1
                         continue
+                    if existing and not existing.transaction_details:
+                        existing.transaction_details = reconciliation_details(tx)
+                        db.commit()
                     # shortcut: ambiguous API outcomes require manual reconciliation until Firefly can look up external IDs reliably.
                     error_message = (
                         f"Import for provider {provider_name}, account {source_account_id}, "

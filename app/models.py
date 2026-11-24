@@ -54,6 +54,7 @@ class ImportedTransaction(Base):
     account_id = Column(String, nullable=False)
     external_id = Column(String, nullable=False)
     status = Column(String, nullable=False, default="processing")
+    transaction_details = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

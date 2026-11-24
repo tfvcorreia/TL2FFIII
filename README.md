@@ -229,6 +229,7 @@ volumes:
 - Transactions without a stable TrueLayer ID rely on Firefly's duplicate-hash check
 - Existing duplicates are not removed automatically
 - An interrupted import may be reported as unresolved and is not retried automatically, to avoid creating another duplicate. Use the dashboard's Unresolved Imports section to mark it already imported only after confirming it exists in Firefly, or allow a retry only after confirming it is absent
+- The unresolved-import table shows the transaction date, description, direction, amount, and currency to help match it against bank activity. Older unresolved records may not have these details until TrueLayer returns them in a later sync.
 
 ### Performance
 

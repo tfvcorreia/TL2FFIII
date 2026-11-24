@@ -10,7 +10,7 @@ os.environ.setdefault("FIREFLY_TOKEN", "test-token")
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.database import Base
+from app.database import Base, init_db
 from app.models import ImportedTransaction, Provider, SyncState
 from app.services.firefly import FireflyService
 from app.services.truelayer import TrueLayerService
@@ -146,6 +146,81 @@ class SyncDeduplicationTests(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["external_id"], "pending-tx")
+
+    def test_unresolved_import_retains_transaction_details_for_reconciliation(self):
+        from app.main import list_unresolved_transactions
+
+        service = FireflyService()
+        transaction = {
+            "external_id": "uncertain-tx",
+            "date": "2026-07-01T10:00:00Z",
+            "amount": "12.50",
+            "type": "withdrawal",
+            "currency_code": "GBP",
+            "description": "Coffee Shop",
+            "source_id": "42",
+        }
+        response = Mock(status_code=503, text="Service unavailable")
+
+        with patch("app.services.firefly.requests.post", return_value=response):
+            service.import_transactions([transaction], "Bank", "account-1", self.db)
+
+        result = list_unresolved_transactions(self.db)
+
+        self.assertEqual(result[0]["transaction_details"]["description"], "Coffee Shop")
+        self.assertEqual(result[0]["transaction_details"]["amount"], "12.50")
+        self.assertEqual(result[0]["transaction_details"]["currency_code"], "GBP")
+
+    def test_existing_unresolved_import_is_backfilled_when_transaction_reappears(self):
+        from app.main import list_unresolved_transactions
+
+        self.db.add(ImportedTransaction(
+            provider_name="Bank",
+            account_id="account-1",
+            external_id="uncertain-tx",
+            status="processing",
+        ))
+        self.db.commit()
+        service = FireflyService()
+        service.get_or_create_account = Mock(return_value="42")
+        transaction = {
+            "transaction_id": "uncertain-tx",
+            "timestamp": "2026-07-01T10:00:00Z",
+            "amount": -12.5,
+            "transaction_type": "DEBIT",
+            "currency": "GBP",
+            "description": "Coffee Shop",
+        }
+
+        with patch("app.services.firefly.requests.post") as post:
+            service.sync_truelayer_transactions(
+                [transaction], "Current Account", "Bank", "account-1", self.db
+            )
+
+        result = list_unresolved_transactions(self.db)
+
+        self.assertEqual(result[0]["transaction_details"]["description"], "Coffee Shop")
+        post.assert_not_called()
+
+    def test_init_db_adds_transaction_details_to_legacy_database(self):
+        from sqlalchemy import inspect, text
+
+        legacy_engine = create_engine("sqlite:///:memory:")
+        with legacy_engine.begin() as connection:
+            connection.execute(text(
+                "CREATE TABLE imported_transactions ("
+                "id INTEGER PRIMARY KEY, provider_name VARCHAR NOT NULL, "
+                "account_id VARCHAR NOT NULL, external_id VARCHAR NOT NULL, "
+                "status VARCHAR NOT NULL, created_at DATETIME)"
+            ))
+
+        init_db(legacy_engine)
+
+        columns = {column["name"] for column in inspect(legacy_engine).get_columns(
+            "imported_transactions"
+        )}
+        self.assertIn("transaction_details", columns)
+        legacy_engine.dispose()
 
     def test_marking_unresolved_import_as_imported_preserves_deduplication(self):
         from app.main import mark_imported_transaction

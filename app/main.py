@@ -303,6 +303,7 @@ def list_unresolved_transactions(db: Session = Depends(get_db)):
             "provider_name": record.provider_name,
             "account_id": record.account_id,
             "external_id": record.external_id,
+            "transaction_details": record.transaction_details,
             "created_at": record.created_at.isoformat() if record.created_at else None,
         }
         for record in records

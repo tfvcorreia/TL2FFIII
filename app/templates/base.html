@@ -399,6 +399,10 @@
                         <tr>
                             <th>Provider</th>
                             <th>TrueLayer Account ID</th>
+                            <th>Transaction Date</th>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Amount</th>
                             <th>Transaction ID</th>
                             <th>Recorded</th>
                             <th>Resolution</th>
@@ -610,12 +614,25 @@
 
                 for (const record of records) {
                     const row = document.createElement('tr');
-                    for (const value of [record.provider_name, record.account_id, record.external_id, record.created_at || 'Unknown']) {
+                    const details = record.transaction_details || {};
+                    const amount = details.amount == null
+                        ? 'Unavailable'
+                        : `${details.amount} ${details.currency_code || ''}`.trim();
+                    for (const value of [
+                        record.provider_name,
+                        record.account_id,
+                        details.date || 'Unavailable',
+                        details.description || 'Details unavailable for this older import',
+                        details.type || 'Unknown',
+                        amount,
+                        record.external_id,
+                        record.created_at || 'Unknown',
+                    ]) {
                         const cell = document.createElement('td');
                         cell.textContent = value;
                         row.appendChild(cell);
                     }
-                    row.children[2].classList.add('unresolved-id');
+                    row.children[6].classList.add('unresolved-id');
 
                     const actionsCell = document.createElement('td');
                     const actions = document.createElement('div');
